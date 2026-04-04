@@ -1,0 +1,6 @@
+venv/
+qrs/*
+!qrs/.gitkeep
+.DS_Store
+.idea/
+__pycache__/
