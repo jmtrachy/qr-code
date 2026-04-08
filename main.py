@@ -1,8 +1,7 @@
 import argparse
 import os
 
-import qrcode
-from PIL import Image
+from generate_qr import generate_qr
 
 
 def main():
@@ -24,24 +23,16 @@ def main():
     output_dir = "qrs"
     os.makedirs(output_dir, exist_ok=True)
 
-    file_path = os.path.join(output_dir, args.destination_file)
-
-    error_correction = qrcode.constants.ERROR_CORRECT_H if args.logo else qrcode.constants.ERROR_CORRECT_M
-
-    qr = qrcode.QRCode(error_correction=error_correction, box_size=10, border=4)
-    qr.add_data(args.url)
-    qr.make(fit=True)
-    img = qr.make_image(fill_color="black", back_color="white").convert("RGBA")
-
+    logo_bytes = None
     if args.logo:
-        logo = Image.open(f'logos/{args.logo}').convert("RGBA")
-        max_logo_size = img.size[0] // 4
-        logo.thumbnail((max_logo_size, max_logo_size))
-        logo_x = (img.size[0] - logo.size[0]) // 2
-        logo_y = (img.size[1] - logo.size[1]) // 2
-        img.paste(logo, (logo_x, logo_y), logo)
+        with open(f"logos/{args.logo}", "rb") as f:
+            logo_bytes = f.read()
 
-    img.save(file_path)
+    image_bytes = generate_qr(args.url, logo_bytes)
+
+    file_path = os.path.join(output_dir, args.destination_file)
+    with open(file_path, "wb") as f:
+        f.write(image_bytes)
 
     print(f"QR code saved to: {os.path.abspath(file_path)}")
 

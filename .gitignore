@@ -4,3 +4,5 @@ qrs/*
 .DS_Store
 .idea/
 __pycache__/
+cdk.out/
+.cdk.staging/
