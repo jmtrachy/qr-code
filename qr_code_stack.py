@@ -8,6 +8,11 @@ from aws_cdk import (
     aws_lambda as _lambda,
     aws_apigateway as apigw,
     aws_s3 as s3,
+    aws_certificatemanager as acm,
+    aws_route53 as route53,
+    aws_route53_targets as route53_targets,
+    aws_cloudfront as cloudfront,
+    aws_cloudfront_origins as origins,
 )
 import platform as _platform
 from aws_cdk import aws_ecr_assets as ecr_assets
@@ -51,6 +56,7 @@ class QrCodeStack(Stack):
             timeout=Duration.seconds(30),
             environment={
                 "QR_S3_BUCKET": bucket.bucket_name,
+                "CUSTOM_DOMAIN": "qrcode.jamestrachy.com",
             },
         )
 
@@ -63,7 +69,54 @@ class QrCodeStack(Stack):
             binary_media_types=["multipart/form-data"],
         )
 
+        # Custom domain: qrcode.jamestrachy.com via CloudFront
+        zone = route53.HostedZone.from_lookup(
+            self, "Zone", domain_name="jamestrachy.com"
+        )
+
+        # CloudFront requires certificates in us-east-1
+        cf_cert = acm.DnsValidatedCertificate(
+            self,
+            "CloudFrontCert",
+            domain_name="qrcode.jamestrachy.com",
+            hosted_zone=zone,
+            region="us-east-1",
+        )
+
+        distribution = cloudfront.Distribution(
+            self,
+            "Distribution",
+            domain_names=["qrcode.jamestrachy.com"],
+            certificate=cf_cert,
+            default_behavior=cloudfront.BehaviorOptions(
+                origin=origins.HttpOrigin(
+                    f"{api.rest_api_id}.execute-api.{self.region}.amazonaws.com",
+                    origin_path=f"/{api.deployment_stage.stage_name}",
+                ),
+                allowed_methods=cloudfront.AllowedMethods.ALLOW_ALL,
+                cache_policy=cloudfront.CachePolicy.CACHING_DISABLED,
+                origin_request_policy=cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
+            ),
+            additional_behaviors={
+                "/qrs/*": cloudfront.BehaviorOptions(
+                    origin=origins.S3Origin(bucket),
+                    cache_policy=cloudfront.CachePolicy.CACHING_OPTIMIZED,
+                ),
+            },
+        )
+
+        route53.ARecord(
+            self,
+            "AliasRecord",
+            zone=zone,
+            record_name="qrcode",
+            target=route53.RecordTarget.from_alias(
+                route53_targets.CloudFrontTarget(distribution)
+            ),
+        )
+
         CfnOutput(self, "ApiUrl", value=api.url)
+        CfnOutput(self, "CustomUrl", value="https://qrcode.jamestrachy.com")
         CfnOutput(self, "BucketName", value=bucket.bucket_name)
 
 

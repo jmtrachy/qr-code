@@ -11,6 +11,7 @@ from generate_qr import generate_qr
 app = FastAPI()
 
 S3_BUCKET = os.environ["QR_S3_BUCKET"]
+CUSTOM_DOMAIN = os.environ.get("CUSTOM_DOMAIN", "")
 s3 = boto3.client("s3")
 
 
@@ -29,7 +30,7 @@ async def generate(
 
     image_bytes = generate_qr(url, logo_bytes)
 
-    s3_key = f"qr-codes/{destination_file}"
+    s3_key = f"qrs/{destination_file}"
     s3.put_object(
         Bucket=S3_BUCKET,
         Key=s3_key,
@@ -37,7 +38,10 @@ async def generate(
         ContentType="image/jpeg",
     )
 
-    file_url = f"https://{S3_BUCKET}.s3.amazonaws.com/{s3_key}"
+    if CUSTOM_DOMAIN:
+        file_url = f"https://{CUSTOM_DOMAIN}/{s3_key}"
+    else:
+        file_url = f"https://{S3_BUCKET}.s3.amazonaws.com/{s3_key}"
     return {"generated_file_location": file_url}
 
 
