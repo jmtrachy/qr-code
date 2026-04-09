@@ -8,6 +8,7 @@ from aws_cdk import (
     aws_lambda as _lambda,
     aws_apigateway as apigw,
     aws_s3 as s3,
+    aws_dynamodb as dynamodb,
     aws_certificatemanager as acm,
     aws_route53 as route53,
     aws_route53_targets as route53_targets,
@@ -39,6 +40,16 @@ class QrCodeStack(Stack):
 
         bucket.add_to_resource_policy(_create_public_read_policy(bucket))
 
+        table = dynamodb.Table(
+            self,
+            "QrCodeTable",
+            partition_key=dynamodb.Attribute(
+                name="id", type=dynamodb.AttributeType.STRING
+            ),
+            billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
+            removal_policy=RemovalPolicy.DESTROY,
+        )
+
         docker_dir = os.path.dirname(__file__) or "."
 
         is_arm = _platform.machine() == "arm64"
@@ -56,11 +67,13 @@ class QrCodeStack(Stack):
             timeout=Duration.seconds(30),
             environment={
                 "QR_S3_BUCKET": bucket.bucket_name,
+                "QR_DYNAMO_TABLE": table.table_name,
                 "CUSTOM_DOMAIN": "qrcode.jamestrachy.com",
             },
         )
 
         bucket.grant_put(fn)
+        table.grant_read_write_data(fn)
 
         api = apigw.LambdaRestApi(
             self,
