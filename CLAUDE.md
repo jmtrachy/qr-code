@@ -1,6 +1,6 @@
 # QR Code Generator
 
-Generates QR codes from URLs with optional logo overlay. Two interfaces: CLI for local use, and a FastAPI web app deployed to AWS Lambda via CDK.
+Generates QR codes from URLs with optional logo overlay. Two interfaces: CLI for local use, and a FastAPI web app deployed to AWS Lambda via CDK. QR codes generated via the web app act as redirect proxies — they point to a `/redirect` endpoint which 302s to the actual destination, enabling scan tracking.
 
 ## Commands
 
@@ -22,8 +22,11 @@ Generates QR codes from URLs with optional logo overlay. Two interfaces: CLI for
 
 - QR generation uses `qrcode` + `Pillow`, returns JPEG bytes
 - Web app receives URL + optional logo via multipart form POST to `/generate`, stores result in S3, returns public URL
+- QR codes encode a redirect URL (`/redirect?qr=<uuid>`) instead of the raw destination. The `/redirect` endpoint looks up the destination in DynamoDB and returns a 302.
+- Scan tracking: each redirect atomically increments a `hit_count` in DynamoDB and emits a structured CloudWatch log (`event: qr_redirect`). Use Logs Insights to query scan patterns.
 - Lambda uses Docker image deployment; architecture auto-detected (ARM64/x86)
 - S3 bucket has public read access for serving generated QR codes
+- DynamoDB table stores QR code records (`id`, `destination_url`, `hit_count`), PAY_PER_REQUEST billing
 
 ## Prerequisites
 
