@@ -14,6 +14,7 @@ from aws_cdk import (
     aws_route53_targets as route53_targets,
     aws_cloudfront as cloudfront,
     aws_cloudfront_origins as origins,
+    aws_ssm as ssm,
 )
 import platform as _platform
 from aws_cdk import aws_ecr_assets as ecr_assets
@@ -82,18 +83,25 @@ class QrCodeStack(Stack):
             binary_media_types=["multipart/form-data"],
         )
 
-        # Custom domain: qrcode.jamestrachy.com via CloudFront
-        zone = route53.HostedZone.from_lookup(
-            self, "Zone", domain_name="jamestrachy.com"
+        # Import shared platform resources via SSM (resolved at deploy time)
+        zone_id = ssm.StringParameter.value_for_string_parameter(
+            self, "/platform/hosted-zone-id"
+        )
+        zone_name = ssm.StringParameter.value_for_string_parameter(
+            self, "/platform/hosted-zone-name"
+        )
+        cert_arn = ssm.StringParameter.value_for_string_parameter(
+            self, "/platform/wildcard-cert-arn"
         )
 
-        # CloudFront requires certificates in us-east-1
-        cf_cert = acm.DnsValidatedCertificate(
-            self,
-            "CloudFrontCert",
-            domain_name="qrcode.jamestrachy.com",
-            hosted_zone=zone,
-            region="us-east-1",
+        zone = route53.HostedZone.from_hosted_zone_attributes(
+            self, "Zone",
+            hosted_zone_id=zone_id,
+            zone_name=zone_name,
+        )
+
+        cf_cert = acm.Certificate.from_certificate_arn(
+            self, "WildcardCert", cert_arn
         )
 
         distribution = cloudfront.Distribution(
