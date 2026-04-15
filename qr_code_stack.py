@@ -70,6 +70,7 @@ class QrCodeStack(Stack):
                 "QR_S3_BUCKET": bucket.bucket_name,
                 "QR_DYNAMO_TABLE": table.table_name,
                 "CUSTOM_DOMAIN": "qrcode.jamestrachy.com",
+                "URL_SHORTENER_URL": "https://l.jamestrachy.com",
             },
         )
 

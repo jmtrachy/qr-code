@@ -4,6 +4,7 @@ import os
 import uuid
 
 import boto3
+import httpx
 from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import RedirectResponse
 from mangum import Mangum
@@ -18,6 +19,7 @@ app = FastAPI()
 S3_BUCKET = os.environ["QR_S3_BUCKET"]
 DYNAMO_TABLE = os.environ["QR_DYNAMO_TABLE"]
 CUSTOM_DOMAIN = os.environ.get("CUSTOM_DOMAIN", "")
+URL_SHORTENER_URL = os.environ.get("URL_SHORTENER_URL", "")
 s3 = boto3.client("s3")
 dynamodb = boto3.resource("dynamodb")
 table = dynamodb.Table(DYNAMO_TABLE)
@@ -30,24 +32,19 @@ async def generate(
 ):
     info = json.loads(qr_info)
     url = info["url"]
-    qr_id = str(uuid.uuid4())
-    destination_file = info.get("destination_file", f"{qr_id}.jpg")
+    destination_file = info.get("destination_file", f"{uuid.uuid4()}.jpg")
 
-    table.put_item(
-        Item={
-            "id": qr_id,
-            "destination_url": url,
-            "hit_count": 0,
-        }
-    )
-
-    redirect_url = f"https://{CUSTOM_DOMAIN}/redirect?qr={qr_id}" if CUSTOM_DOMAIN else f"/redirect?qr={qr_id}"
+    # Get a short URL from the URL shortener service
+    resp = httpx.post(f"{URL_SHORTENER_URL}/generate", json={"url": url})
+    if resp.status_code != 200:
+        raise HTTPException(status_code=502, detail="Failed to generate short URL")
+    short_url = resp.json()["short_url"]
 
     logo_bytes = None
     if logo:
         logo_bytes = await logo.read()
 
-    image_bytes = generate_qr(redirect_url, logo_bytes)
+    image_bytes = generate_qr(short_url, logo_bytes)
 
     s3_key = f"qrs/{destination_file}"
     s3.put_object(
@@ -61,7 +58,7 @@ async def generate(
         file_url = f"https://{CUSTOM_DOMAIN}/{s3_key}"
     else:
         file_url = f"https://{S3_BUCKET}.s3.amazonaws.com/{s3_key}"
-    return {"generated_file_location": file_url, "qr_id": qr_id}
+    return {"generated_file_location": file_url, "redirect_url": short_url}
 
 
 @app.get("/redirect")
